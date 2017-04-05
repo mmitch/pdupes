@@ -13,7 +13,9 @@ use Digest::xxHash qw(xxhash64);
 use Data::Dumper;
 
 use constant {
-    HASH_SEED => 0x0,
+    LOG_INFO => 0,
+    
+    HASH_SEED => 0xc001c0de,
     SHORT_HASH_LENGTH => 1024
 };
 
@@ -35,12 +37,15 @@ my @dirs_to_scan = @ARGV;
 # print info text (for debugging)
 sub info
 {
+    return unless LOG_INFO;
     print "@_\n";
 }
 
 # print formatted info text (for debugging)
 sub infof
 {
+    return unless LOG_INFO;
+    
     my $fmt = shift @_;
     info(sprintf($fmt, @_));
 }
@@ -48,6 +53,8 @@ sub infof
 # compute and show statistics of global file hash
 sub dump_stats
 {
+    return unless LOG_INFO;
+
     my ($files) = (@_);
     
     my ($dev_count, $size_count, $file_count) = (0, 0, 0);
@@ -65,6 +72,8 @@ sub dump_stats
 # compute and show statistics hashed files
 sub dump_hash_stats
 {
+    return unless LOG_INFO;
+    
     my ($hashes) = (@_);
     my ($hash_count, $max_dupes) = (0, 0);
 
