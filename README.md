@@ -25,3 +25,19 @@ usage
 
 pdupes will scan all files in the given directories and will then
 hardlink duplicate files to each other to consume disk space.
+
+
+#TODO
+-----
+
+* add dedupication: hardlink duplicate file, don't just print them
+
+* add inode comparison: already hardlinked files can be skipped
+
+* add tangled POD
+
+* add test cases
+
+* add TravisCI build
+  
+* add license/copyright

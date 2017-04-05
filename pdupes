@@ -237,9 +237,3 @@ dump_stats();
 
 info 'finding matches';
 find_matches();
-
-
-#### TODO: inode stuff
-#### TODO: linking action
-#### TODO: literate POD
-#### TODO: test cases
