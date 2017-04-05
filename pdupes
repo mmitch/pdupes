@@ -1,0 +1,245 @@
+#!/usr/bin/perl -w
+use warnings;
+use strict;
+
+use File::Find;
+use Digest::xxHash qw(xxhash64);
+use Data::Dumper;
+
+use constant {
+    HASH_SEED => 0x0,
+    SHORT_HASH_LENGTH => 1024
+};
+
+my $allfiles;
+
+sub info
+{
+#    print "@_\n";
+}
+
+sub infof
+{
+    my $fmt = shift @_;
+    info(sprintf($fmt, @_));
+}
+
+sub register_file
+{
+    my ($dev, $inode, $mode, $nlink, $uid, $gid, undef, $size, $atime, $mtime, $ctime, $blksize) = lstat($_);
+
+    return unless -f _; # only care about normal files
+    return unless $size; # skip empty files
+
+    my $file = {
+	DEV => $dev,
+	INODE => $inode,
+	MODE => $mode,
+	NLINK => $nlink,
+	UID => $uid,
+	GID => $gid,
+	SIZE => $size,
+	MTIME => $mtime,
+	CTIME => $ctime,
+	BLKSIZE => $blksize,
+	NAME => $File::Find::name
+    };
+
+    push @{$allfiles->{$dev}->{$size}}, $file;
+}
+
+sub dump_stats
+{
+    my ($dev_count, $size_count, $file_count) = (0, 0, 0);
+    foreach my $dev (keys %{$allfiles}) {
+	$dev_count++;
+	foreach my $size (keys %{$allfiles->{$dev}}) {
+	    $size_count++;
+	    $file_count += keys @{$allfiles->{$dev}->{$size}};
+	}
+    }
+
+    infof '%4d devices %12d sizes %12d files', $dev_count, $size_count, $file_count;
+}
+
+sub dump_hash_stats
+{
+    my ($hashes) = (@_);
+    my ($hash_count, $max_dupes) = (0, 0);
+
+    foreach my $hash (keys %{$hashes}) {
+	$hash_count++;
+	my $dupes = @{$hashes->{$hash}};
+	if ($dupes > $max_dupes) {
+	    $max_dupes = $dupes;
+	}
+    }
+
+    infof '%8d hashes, %8d maximum dupes', $hash_count, $max_dupes;
+}
+
+sub remove_single_sizes
+{
+   foreach my $dev (keys %{$allfiles}) {
+	foreach my $size (keys %{$allfiles->{$dev}}) {
+	    my $file_count = keys @{$allfiles->{$dev}->{$size}};
+	    if ($file_count == 1) {
+		delete $allfiles->{$dev}->{$size};
+	    }
+	}
+    }
+}
+
+sub min
+{
+    my ($a, $b) = (@_);
+    if ($a < $b) {
+	return $a;
+    }
+    else {
+	return $b;
+    }
+}
+
+sub compute_hash
+{
+    my ($file, $maxlen) = (@_);
+
+    my $hash = HASH_SEED;
+    my $data;
+    
+    open HASH, '<', $file->{NAME} or die "can't open `$file->{NAME}': $!";
+    my $rest = $file->{SIZE};
+    while ($rest) {
+	my $to_read = min($rest, $file->{BLKSIZE});
+	my $read = read(HASH, $data, $to_read);
+	die "read $read bytes, but wanted to read $to_read on `$file->{NAME}': $!" unless $to_read = $read;
+	$hash = xxhash64($data, $hash);
+	$rest -= $read;
+    }
+    close HASH or die "can't close `$file->{NAME}': $!";
+
+    return $hash;
+}
+
+sub compute_short_hash
+{
+    my ($file) = (@_);
+
+    return compute_hash($file, min($file->{SIZE}, SHORT_HASH_LENGTH));
+}
+
+sub compute_long_hash
+{
+    my ($file) = (@_);
+
+    return compute_hash($file, $file->{SIZE});
+}
+
+sub remove_single_entries
+{
+    my ($hashOfLists) = (@_);
+
+    foreach my $hashKey (keys %{$hashOfLists}) {
+	if (@{$hashOfLists->{$hashKey}} == 1) {
+	    delete $hashOfLists->{$hashKey};
+	}
+    }
+}
+
+sub compare_by_short_hash
+{
+    my ($files) = (@_);
+
+    my $hashed_short;
+    
+    for my $file (@{$files}) {
+	my $hash = compute_short_hash($file);
+	$file->{SHORTHASH} = $hash;
+	push @{$hashed_short->{$hash}}, $file;
+    }
+
+    remove_single_entries($hashed_short);
+
+    info 'purged short hash statistics:';
+    dump_hash_stats($hashed_short);
+
+    return $hashed_short;
+}
+
+sub compare_by_long_hash
+{
+    my ($hashed_short) = (@_);
+
+    my $hashed_long;
+
+    for my $shorthash (keys %{$hashed_short}) {
+	my $files = delete $hashed_short->{$shorthash}; # free memory as early as possible
+	for my $file (@{$files}) {
+	    my $hash = compute_long_hash($file);
+	    $file->{LONGHASH} = $hash;
+	    push @{$hashed_long->{$hash}}, $file;
+	}
+    }
+
+    remove_single_entries($hashed_long);
+
+    info 'purged long hash statistics:';
+    dump_hash_stats($hashed_long);
+
+    return $hashed_long;   
+}
+
+sub print_duplicates
+{
+    my ($filegroups) = (@_);
+
+    foreach my $filegroup (values %{$filegroups}) {
+	print "$_->{NAME}\n" foreach (@{$filegroup});
+	print "\n";
+    }
+}
+
+sub compare_files
+{
+    my ($files) = (@_);
+
+    my $hashed_short = compare_by_short_hash($files);
+    return unless %{$hashed_short};
+    
+    my $hashed_long = compare_by_long_hash($hashed_short);
+    $hashed_short = undef; # free memory as early as possible
+    return unless %{$hashed_long};
+    
+    ## TODO    my $deduped = compare_by_content($hashed_long);
+
+    print_duplicates($hashed_long);
+}
+
+sub find_matches
+{
+   foreach my $dev (keys %{$allfiles}) {
+       foreach my $size (sort { $b <=> $a } keys %{$allfiles->{$dev}}) {
+	   compare_files(delete $allfiles->{$dev}->{$size}); # free memory as early as possible
+       }
+   }
+}
+
+die "no directories given" unless @ARGV;
+
+# recursively scan all given directories
+find(\&register_file, @ARGV);
+dump_stats();
+
+info 'dropping sizes with just 1 file';
+remove_single_sizes();
+dump_stats();
+
+info 'finding matches';
+find_matches();
+
+
+#### TODO: inode stuff
+#### TODO: linking action
+#### TODO: literate POD
+#### TODO: test cases
