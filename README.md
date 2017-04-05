@@ -16,7 +16,7 @@ different design goals:
   pdupes favors a small and simple codebase and more expensive higher
   language constructs over resource usage.
 
-* pdupes functionality should be verified by automated tests
+* pdupes functionality should be verified by automated tests.
 
 
 usage
