@@ -2,6 +2,12 @@
 use warnings;
 use strict;
 
+=head1 NAME
+
+pdupes - Perl duplicate file finder and deduper 
+
+=cut
+
 use File::Find;
 use Digest::xxHash qw(xxhash64);
 use Data::Dumper;
@@ -11,19 +17,143 @@ use constant {
     SHORT_HASH_LENGTH => 1024
 };
 
-my $allfiles;
+=head1 SYNOPSIS
 
+    pdupes <directory> [<directory> ...]
+
+=head1 DESCRIPTION
+
+pdupes will find duplicate files with identical file content and try
+to hardlink them together to save disk space.
+
+=cut
+    
+die "no directories given" unless @ARGV;
+my @dirs_to_scan = @ARGV;
+
+
+# print info text (for debugging)
 sub info
 {
-#    print "@_\n";
+    print "@_\n";
 }
 
+# print formatted info text (for debugging)
 sub infof
 {
     my $fmt = shift @_;
     info(sprintf($fmt, @_));
 }
 
+# compute and show statistics of global file hash
+sub dump_stats
+{
+    my ($files) = (@_);
+    
+    my ($dev_count, $size_count, $file_count) = (0, 0, 0);
+    foreach my $dev (keys %{$files}) {
+	$dev_count++;
+	foreach my $size (keys %{$files->{$dev}}) {
+	    $size_count++;
+	    $file_count += keys @{$files->{$dev}->{$size}};
+	}
+    }
+
+    infof '%4d devices %12d sizes %12d files', $dev_count, $size_count, $file_count;
+}
+
+# compute and show statistics hashed files
+sub dump_hash_stats
+{
+    my ($hashes) = (@_);
+    my ($hash_count, $max_dupes) = (0, 0);
+
+    foreach my $hash (keys %{$hashes}) {
+	$hash_count++;
+	my $dupes = @{$hashes->{$hash}};
+	if ($dupes > $max_dupes) {
+	    $max_dupes = $dupes;
+	}
+    }
+
+    infof '%8d hashes, %8d maximum dupes', $hash_count, $max_dupes;
+}
+
+# return the smaller of two values
+sub min
+{
+    my ($a, $b) = (@_);
+    if ($a < $b) {
+	return $a;
+    }
+    else {
+	return $b;
+    }
+}
+
+# compute the hash of a file up to a given length
+sub compute_hash
+{
+    my ($file, $maxlen) = (@_);
+
+    my $hash = HASH_SEED;
+    my $data;
+    
+    open HASH, '<', $file->{NAME} or die "can't open `$file->{NAME}': $!";
+    my $rest = $file->{SIZE};
+    while ($rest) {
+	my $to_read = min($rest, $file->{BLKSIZE});
+	my $read = read(HASH, $data, $to_read);
+	die "read $read bytes, but wanted to read $to_read on `$file->{NAME}': $!" unless $to_read = $read;
+	$hash = xxhash64($data, $hash);
+	$rest -= $read;
+    }
+    close HASH or die "can't close `$file->{NAME}': $!";
+
+    return $hash;
+}
+
+# compute the short hash of a file
+sub compute_short_hash
+{
+    my ($file) = (@_);
+
+    return compute_hash($file, min($file->{SIZE}, SHORT_HASH_LENGTH));
+}
+
+# compute the long hash of a file
+sub compute_long_hash
+{
+    my ($file) = (@_);
+
+    return compute_hash($file, $file->{SIZE});
+}
+
+# removes lists with only 1 list element from a hash of lists
+sub remove_single_entries
+{
+    my ($hashOfLists) = (@_);
+
+    foreach my $hashKey (keys %{$hashOfLists}) {
+	if (@{$hashOfLists->{$hashKey}} == 1) {
+	    delete $hashOfLists->{$hashKey};
+	}
+    }
+}
+
+=head1 DETAILED MODE OF OPERATION
+
+pdupes recursively scans all given directories for normal files.
+Symlinks, devices, named pipes etc. are skipped.  Empty files are
+skipped as well.
+
+Files are grouped by the device their filesystem is on (as hardlinks
+can never span multiple filesystems) and their file size (because
+identical files must have identical filesizes).
+
+=cut
+
+my $allfiles;
 sub register_file
 {
     my ($dev, $inode, $mode, $nlink, $uid, $gid, undef, $size, $atime, $mtime, $ctime, $blksize) = lstat($_);
@@ -48,35 +178,15 @@ sub register_file
     push @{$allfiles->{$dev}->{$size}}, $file;
 }
 
-sub dump_stats
-{
-    my ($dev_count, $size_count, $file_count) = (0, 0, 0);
-    foreach my $dev (keys %{$allfiles}) {
-	$dev_count++;
-	foreach my $size (keys %{$allfiles->{$dev}}) {
-	    $size_count++;
-	    $file_count += keys @{$allfiles->{$dev}->{$size}};
-	}
-    }
+find(\&register_file, @dirs_to_scan);
+dump_stats($allfiles);
 
-    infof '%4d devices %12d sizes %12d files', $dev_count, $size_count, $file_count;
-}
+=pod
 
-sub dump_hash_stats
-{
-    my ($hashes) = (@_);
-    my ($hash_count, $max_dupes) = (0, 0);
+File size groups containing only a single file (a unique file size)
+are discarded, because there can't be any duplicates.
 
-    foreach my $hash (keys %{$hashes}) {
-	$hash_count++;
-	my $dupes = @{$hashes->{$hash}};
-	if ($dupes > $max_dupes) {
-	    $max_dupes = $dupes;
-	}
-    }
-
-    infof '%8d hashes, %8d maximum dupes', $hash_count, $max_dupes;
-}
+=cut
 
 sub remove_single_sizes
 {
@@ -90,63 +200,16 @@ sub remove_single_sizes
     }
 }
 
-sub min
-{
-    my ($a, $b) = (@_);
-    if ($a < $b) {
-	return $a;
-    }
-    else {
-	return $b;
-    }
-}
+=pod
 
-sub compute_hash
-{
-    my ($file, $maxlen) = (@_);
+The files of every device/size-group are read and a partial hash value
+over the beginning of the file is calculated.  The files of the group
+are regrouped by their partial hash values.
 
-    my $hash = HASH_SEED;
-    my $data;
+Partial hash groups that contain only a single file are discarded.
+
+=cut
     
-    open HASH, '<', $file->{NAME} or die "can't open `$file->{NAME}': $!";
-    my $rest = $file->{SIZE};
-    while ($rest) {
-	my $to_read = min($rest, $file->{BLKSIZE});
-	my $read = read(HASH, $data, $to_read);
-	die "read $read bytes, but wanted to read $to_read on `$file->{NAME}': $!" unless $to_read = $read;
-	$hash = xxhash64($data, $hash);
-	$rest -= $read;
-    }
-    close HASH or die "can't close `$file->{NAME}': $!";
-
-    return $hash;
-}
-
-sub compute_short_hash
-{
-    my ($file) = (@_);
-
-    return compute_hash($file, min($file->{SIZE}, SHORT_HASH_LENGTH));
-}
-
-sub compute_long_hash
-{
-    my ($file) = (@_);
-
-    return compute_hash($file, $file->{SIZE});
-}
-
-sub remove_single_entries
-{
-    my ($hashOfLists) = (@_);
-
-    foreach my $hashKey (keys %{$hashOfLists}) {
-	if (@{$hashOfLists->{$hashKey}} == 1) {
-	    delete $hashOfLists->{$hashKey};
-	}
-    }
-}
-
 sub compare_by_short_hash
 {
     my ($files) = (@_);
@@ -167,6 +230,17 @@ sub compare_by_short_hash
     return $hashed_short;
 }
 
+=pod
+
+The files of the remaining groups of partial hashes are read again and
+hash value over the complete file content is calculated for every
+file.  The files are again regrouped, this time by their full hash
+value.
+
+Like before, hash groups that contain only a single file are discarded.
+
+=cut
+    
 sub compare_by_long_hash
 {
     my ($hashed_short) = (@_);
@@ -190,6 +264,7 @@ sub compare_by_long_hash
     return $hashed_long;   
 }
 
+## TODO: continue POD, reorder contents? (no prototypes anyway)
 sub print_duplicates
 {
     my ($filegroups) = (@_);
@@ -225,11 +300,7 @@ sub find_matches
    }
 }
 
-die "no directories given" unless @ARGV;
-
 # recursively scan all given directories
-find(\&register_file, @ARGV);
-dump_stats();
 
 info 'dropping sizes with just 1 file';
 remove_single_sizes();
