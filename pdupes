@@ -190,13 +190,8 @@ are discarded, because there can't be any duplicates.
 
 sub remove_single_sizes
 {
-   foreach my $dev (keys %{$allfiles}) {
-	foreach my $size (keys %{$allfiles->{$dev}}) {
-	    my $file_count = keys @{$allfiles->{$dev}->{$size}};
-	    if ($file_count == 1) {
-		delete $allfiles->{$dev}->{$size};
-	    }
-	}
+    foreach my $dev (keys %{$allfiles}) {
+	remove_single_entries($allfiles->{$dev});
     }
 }
 
