@@ -329,7 +329,7 @@ sub find_matches
 
 info 'dropping sizes with just 1 file';
 remove_single_sizes();
-dump_stats();
+dump_stats($allfiles);
 
 info 'finding matches';
 find_matches();
