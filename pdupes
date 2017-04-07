@@ -279,9 +279,30 @@ sub print_duplicates
     }
 }
 
+sub remove_hardlinked_files
+{
+    my ($files) = (@_);
+
+    my $by_inode;
+    foreach my $file (@{$files}) {
+	my $inode = $file->{INODE};
+	$by_inode->{$inode} = $file unless exists $by_inode->{$inode};
+    }
+
+    return [ values %{$by_inode} ];
+}
+
 sub compare_files
 {
     my ($files) = (@_);
+
+    infof '%8d files (size %d)', scalar @{$files}, $files->[0]->{SIZE};
+
+    $files = remove_hardlinked_files($files);
+
+    info 'discarded already hardlinked files:';
+    infof '%8d files', scalar @{$files};
+    return unless @{$files} > 1;
 
     my $hashed_short = compare_by_short_hash($files);
     return unless %{$hashed_short};
