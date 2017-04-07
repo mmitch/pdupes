@@ -15,4 +15,4 @@ script:
 
 # run coverage only once and on non-mongled, non-PodWeavered code or line numbers won't match
 after_success:
-  - test $TRAVIS_PERL_VERSION = '5.22' && cpanm --quiet --notest --skip-satisfied Devel::Cover Devel::Cover::Report::Codecov && * . && cover -test -report codecov
+  - test $TRAVIS_PERL_VERSION = '5.22' && cpanm --quiet --notest --skip-satisfied Devel::Cover Devel::Cover::Report::Codecov && cover -test -report codecov
