@@ -2,6 +2,8 @@
 use warnings;
 use strict;
 
+package App::Pdupes;
+
 =head1 NAME
 
 pdupes - Perl duplicate file finder and deduper 
@@ -30,10 +32,6 @@ to hardlink them together to save disk space.
 
 =cut
     
-die "no directories given" unless @ARGV;
-my @dirs_to_scan = @ARGV;
-
-
 # print info text (for debugging)
 sub info
 {
@@ -187,9 +185,6 @@ sub register_file
     push @{$allfiles->{$dev}->{$size}}, $file;
 }
 
-find(\&register_file, @dirs_to_scan);
-dump_stats($allfiles);
-
 =pod
 
 File size groups containing only a single file (a unique file size)
@@ -325,11 +320,25 @@ sub find_matches
    }
 }
 
-# recursively scan all given directories
+sub run
+{
+    my $class = shift;
+    my (@dirs_to_scan) = (@_);
 
-info 'dropping sizes with just 1 file';
-remove_single_sizes();
-dump_stats($allfiles);
+    die "no directories given" unless @dirs_to_scan;
 
-info 'finding matches';
-find_matches();
+    find(\&register_file, @dirs_to_scan);
+    dump_stats($allfiles);
+
+    # recursively scan all given directories
+
+    info 'dropping sizes with just 1 file';
+    remove_single_sizes();
+    dump_stats($allfiles);
+
+    info 'finding matches';
+    find_matches();
+}
+
+# only do something if called as a script
+__PACKAGE__->run(@ARGV) unless defined caller() and caller() ne 'PAR';
