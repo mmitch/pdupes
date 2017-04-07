@@ -39,8 +39,6 @@ hardlink duplicate files to each other to consume disk space.
 
 * add test cases
 
-* add TravisCI build
-  
 * add license/copyright
 
 * add project URL and badges

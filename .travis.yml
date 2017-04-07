@@ -1,0 +1,18 @@
+language: perl
+
+perl:
+  - "5.22"
+  - "5.20"
+  - "5.18"
+  - "5.16"
+  - "5.14"
+
+install:
+  - cpanm --quiet --notest --skip-satisfied Test::TempDir::Tiny Digest::xxHash
+
+script:
+  - make test
+
+# run coverage only once and on non-mongled, non-PodWeavered code or line numbers won't match
+after_success:
+  - test $TRAVIS_PERL_VERSION = '5.22' && cpanm --quiet --notest --skip-satisfied Devel::Cover Devel::Cover::Report::Codecov && * . && cover -test -report codecov
