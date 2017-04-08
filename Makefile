@@ -4,6 +4,10 @@ SOURCES	:= pdupes $(wildcard t/*.t)
 test:
 	cd t; prove .
 
+# this will need Test::Continuous
+autotest:
+	cd t; autoprove
+
 cover:
 	cover -test -ignore '\.t$$'
 
