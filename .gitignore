@@ -1,4 +1,6 @@
 *~
 
+.deps
+
 # code coverage
 cover_db/
