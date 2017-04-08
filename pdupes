@@ -139,11 +139,11 @@ sub compute_long_hash
 # removes lists with only 1 list element from a hash of lists
 sub remove_single_entries
 {
-    my ($hashOfLists) = (@_);
+    my ($hash_of_lists) = (@_);
 
-    foreach my $hashKey (keys %{$hashOfLists}) {
-	if (@{$hashOfLists->{$hashKey}} == 1) {
-	    delete $hashOfLists->{$hashKey};
+    foreach my $hashKey (keys %{$hash_of_lists}) {
+	if (@{$hash_of_lists->{$hashKey}} == 1) {
+	    delete $hash_of_lists->{$hashKey};
 	}
     }
 }
