@@ -136,13 +136,13 @@ sub compute_long_hash
     return compute_hash($file, $file->{SIZE});
 }
 
-# removes lists with only 1 list element from a hash of lists
+# removes lists with less than 2 elements from a hash of lists
 sub remove_single_entries
 {
     my ($hash_of_lists) = (@_);
 
     foreach my $hashKey (keys %{$hash_of_lists}) {
-	if (@{$hash_of_lists->{$hashKey}} == 1) {
+	if (@{$hash_of_lists->{$hashKey}} < 2) {
 	    delete $hash_of_lists->{$hashKey};
 	}
     }
