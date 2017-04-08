@@ -107,7 +107,7 @@ sub compute_hash
     my $data;
     
     open HASH, '<', $file->{NAME} or die "can't open `$file->{NAME}': $!";
-    my $rest = $file->{SIZE};
+    my $rest = $maxlen;
     while ($rest) {
 	my $to_read = min($rest, $file->{BLKSIZE});
 	my $read = read(HASH, $data, $to_read);
