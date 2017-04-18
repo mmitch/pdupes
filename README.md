@@ -1,6 +1,9 @@
 pdupes – Perl duplicate file finder and deduper
 ===============================================
 
+[![Build Status](https://travis-ci.org/mmitch/pdupes.svg?branch=master)](https://travis-ci.org/mmitch/pdupes)
+[![Coverage Status](https://codecov.io/github/mmitch/pdupes/coverage.svg?branch=master)](https://codecov.io/github/mmitch/pdupes?branch=master)
+
 abstract
 --------
 
@@ -31,16 +34,12 @@ hardlink duplicate files to each other to consume disk space.
 #TODO
 -----
 
-* add dedupication: hardlink duplicate file, don't just print them
-
-* add inode comparison: already hardlinked files can be skipped
+* add dedupication: hardlink duplicate files, don't just print them
 
 * add tangled POD
 
 * add test cases
 
-* add TravisCI build
-  
 * add license/copyright
 
-* add project URL and badges
+* add project URL and license badge

@@ -1,0 +1,7 @@
+*~
+
+.deps
+tmp/
+
+# code coverage
+cover_db/

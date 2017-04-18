@@ -2,6 +2,8 @@
 use warnings;
 use strict;
 
+package App::Pdupes;
+
 =head1 NAME
 
 pdupes - Perl duplicate file finder and deduper 
@@ -30,10 +32,6 @@ to hardlink them together to save disk space.
 
 =cut
     
-die "no directories given" unless @ARGV;
-my @dirs_to_scan = @ARGV;
-
-
 # print info text (for debugging)
 sub info
 {
@@ -109,7 +107,7 @@ sub compute_hash
     my $data;
     
     open HASH, '<', $file->{NAME} or die "can't open `$file->{NAME}': $!";
-    my $rest = $file->{SIZE};
+    my $rest = $maxlen;
     while ($rest) {
 	my $to_read = min($rest, $file->{BLKSIZE});
 	my $read = read(HASH, $data, $to_read);
@@ -138,14 +136,14 @@ sub compute_long_hash
     return compute_hash($file, $file->{SIZE});
 }
 
-# removes lists with only 1 list element from a hash of lists
+# removes lists with less than 2 elements from a hash of lists
 sub remove_single_entries
 {
-    my ($hashOfLists) = (@_);
+    my ($hash_of_lists) = (@_);
 
-    foreach my $hashKey (keys %{$hashOfLists}) {
-	if (@{$hashOfLists->{$hashKey}} == 1) {
-	    delete $hashOfLists->{$hashKey};
+    foreach my $hashKey (keys %{$hash_of_lists}) {
+	if (@{$hash_of_lists->{$hashKey}} < 2) {
+	    delete $hash_of_lists->{$hashKey};
 	}
     }
 }
@@ -186,9 +184,6 @@ sub register_file
 
     push @{$allfiles->{$dev}->{$size}}, $file;
 }
-
-find(\&register_file, @dirs_to_scan);
-dump_stats($allfiles);
 
 =pod
 
@@ -279,9 +274,30 @@ sub print_duplicates
     }
 }
 
+sub remove_hardlinked_files
+{
+    my ($files) = (@_);
+
+    my $by_inode;
+    foreach my $file (@{$files}) {
+	my $inode = $file->{INODE};
+	$by_inode->{$inode} = $file unless exists $by_inode->{$inode};
+    }
+
+    return [ values %{$by_inode} ];
+}
+
 sub compare_files
 {
     my ($files) = (@_);
+
+    infof '%8d files (size %d)', scalar @{$files}, $files->[0]->{SIZE};
+
+    $files = remove_hardlinked_files($files);
+
+    info 'discarded already hardlinked files:';
+    infof '%8d files', scalar @{$files};
+    return unless @{$files} > 1;
 
     my $hashed_short = compare_by_short_hash($files);
     return unless %{$hashed_short};
@@ -304,11 +320,25 @@ sub find_matches
    }
 }
 
-# recursively scan all given directories
+sub run
+{
+    my $class = shift;
+    my (@dirs_to_scan) = (@_);
 
-info 'dropping sizes with just 1 file';
-remove_single_sizes();
-dump_stats();
+    die "no directories given" unless @dirs_to_scan;
 
-info 'finding matches';
-find_matches();
+    find(\&register_file, @dirs_to_scan);
+    dump_stats($allfiles);
+
+    # recursively scan all given directories
+
+    info 'dropping sizes with just 1 file';
+    remove_single_sizes();
+    dump_stats($allfiles);
+
+    info 'finding matches';
+    find_matches();
+}
+
+# only do something if called as a script
+__PACKAGE__->run(@ARGV) unless defined caller() and caller() ne 'PAR';
