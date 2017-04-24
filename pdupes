@@ -194,9 +194,13 @@ are discarded, because there can't be any duplicates.
 
 sub remove_single_sizes
 {
-    foreach my $dev (keys %{$allfiles}) {
-	remove_single_entries($allfiles->{$dev});
+    my ($files) = (@_);
+
+    foreach my $dev (keys %{$files}) {
+	remove_single_entries($files->{$dev});
     }
+
+    return $files;
 }
 
 =pod
@@ -344,7 +348,7 @@ sub run
     # recursively scan all given directories
 
     info 'dropping sizes with just 1 file';
-    remove_single_sizes();
+    $allfiles = remove_single_sizes($allfiles);
     dump_stats($allfiles);
 
     info 'finding matches';

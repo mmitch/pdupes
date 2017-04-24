@@ -1,5 +1,5 @@
 #!perl
-use Test::More tests => 2;
+use Test::More tests => 3;
 use warnings;
 use strict;
 
@@ -37,7 +37,7 @@ subtest 'find_files()' => sub {
     my $sizes = $allfiles->{$device};
 
     is( scalar keys %{$sizes}, 3, 'check size bins' );
-    
+
     subtest 'size 3' => sub {
 	my $files = $sizes->{3};
 	is( scalar @{$files}, 5, 'file count' );
@@ -65,6 +65,40 @@ subtest 'find_files()' => sub {
 	my @filenames = sort map { basename($_->{NAME}) } @{$files};
 	is_deeply( \@filenames,
 		   [ 'fileI_uniquesized' ],
+		   'filenames' );
+    };
+
+};
+
+subtest 'remove_single_sizes()' => sub {
+
+    my $allfiles = App::Pdupes::find_files( $dir );
+    $allfiles = App::Pdupes::remove_single_sizes( $allfiles );
+
+    is( scalar keys %{$allfiles}, 1, 'all files on one device' );
+
+    my $device = (keys %{$allfiles})[0];
+    my $sizes = $allfiles->{$device};
+
+    is( scalar keys %{$sizes}, 2, 'check size bins' );
+
+    subtest 'size 3' => sub {
+	my $files = $sizes->{3};
+	is( scalar @{$files}, 5, 'file count' );
+
+	my @filenames = sort map { basename($_->{NAME}) } @{$files};
+	is_deeply( \@filenames,
+		   [ 'fileA_short1', 'fileB_short1', 'fileC_short2', 'fileG_linked', 'fileH_linked' ],
+		   'filenames' );
+    };
+
+    subtest 'size long' => sub {
+	my $files = $sizes->{App::Pdupes::SHORT_HASH_LENGTH + 3};
+	is( scalar @{$files}, 2, 'file count' );
+
+	my @filenames = sort map { basename($_->{NAME}) } @{$files};
+	is_deeply( \@filenames,
+		   [ 'fileD_long1', 'fileE_long2' ],
 		   'filenames' );
     };
 
