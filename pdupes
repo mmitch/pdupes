@@ -320,6 +320,15 @@ sub find_matches
    }
 }
 
+sub find_files
+{
+    my (@dirs_to_scan) = (@_);
+
+    find(\&register_file, @dirs_to_scan);
+
+    return $allfiles;
+}
+
 sub run
 {
     my $class = shift;
@@ -327,7 +336,7 @@ sub run
 
     die "no directories given" unless @dirs_to_scan;
 
-    find(\&register_file, @dirs_to_scan);
+    $allfiles = find_files(@dirs_to_scan);
     dump_stats($allfiles);
 
     # recursively scan all given directories
