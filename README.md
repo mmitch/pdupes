@@ -34,7 +34,7 @@ hardlink duplicate files to each other to consume disk space.
 #TODO
 -----
 
-* add dedupication: hardlink duplicate files, don't just print them
+* add deduplication: hardlink duplicate files, don't just print them
 
 * add tangled POD
 
