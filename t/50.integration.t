@@ -27,7 +27,7 @@ my $uniquefile  = create_file($dir, 'fileI_uniquesized', 'kilroy' );
 
 ### tests
 
-subtest 'scan_files' => sub {
+subtest 'find_files()' => sub {
 
     my $allfiles = App::Pdupes::find_files( $dir );
 
@@ -58,7 +58,7 @@ subtest 'scan_files' => sub {
 		   'filenames' );
     };
 
-    subtest 'size 3' => sub {
+    subtest 'size 6' => sub {
 	my $files = $sizes->{6};
 	is( scalar @{$files}, 1, 'file count' );
 
