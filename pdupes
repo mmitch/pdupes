@@ -10,6 +10,7 @@ pdupes - Perl duplicate file finder and deduper
 
 =cut
 
+use File::Compare;
 use File::Find;
 use Digest::xxHash qw(xxhash64);
 use Data::Dumper;
@@ -213,7 +214,7 @@ Partial hash groups that contain only a single file are discarded.
 
 =cut
     
-sub compare_by_short_hash
+sub group_by_short_hash
 {
     my ($files) = (@_);
 
@@ -230,7 +231,7 @@ sub compare_by_short_hash
     info 'purged short hash statistics:';
     dump_hash_stats($hashed_short);
 
-    return $hashed_short;
+    return [ values %{$hashed_short} ];
 }
 
 =pod
@@ -244,19 +245,16 @@ Like before, hash groups that contain only a single file are discarded.
 
 =cut
     
-sub compare_by_long_hash
+sub group_by_long_hash
 {
-    my ($hashed_short) = (@_);
+    my ($files) = (@_);
 
     my $hashed_long;
 
-    for my $shorthash (keys %{$hashed_short}) {
-	my $files = delete $hashed_short->{$shorthash}; # free memory as early as possible
-	for my $file (@{$files}) {
-	    my $hash = compute_long_hash($file);
-	    $file->{LONGHASH} = $hash;
-	    push @{$hashed_long->{$hash}}, $file;
-	}
+    for my $file (@{$files}) {
+	my $hash = compute_long_hash($file);
+	$file->{LONGHASH} = $hash;
+	push @{$hashed_long->{$hash}}, $file;
     }
 
     remove_single_entries($hashed_long);
@@ -264,21 +262,52 @@ sub compare_by_long_hash
     info 'purged long hash statistics:';
     dump_hash_stats($hashed_long);
 
-    return $hashed_long;   
+    return [ values %{$hashed_long} ];
 }
 
 ## TODO: continue POD, reorder contents? (no prototypes anyway)
-sub print_duplicates
+sub group_by_content
 {
-    my ($filegroups) = (@_);
+    my ($files) = (@_);
 
-    foreach my $filegroup (values %{$filegroups}) {
-	print "$_->{NAME}\n" foreach (@{$filegroup});
-	print "\n";
+    my $groups;
+    
+    my $group_id = 0;
+    while (@{$files}) {
+	
+	my $anchor = pop @{$files};
+	$groups->{$group_id} = [ $anchor ];
+
+	my $i = 0;
+	while ($i < @{$files}) {
+	    if (compare( $anchor->{NAME}, $files->[$i]->{NAME} )) {
+		$i++;
+	    }
+	    else {
+		push @{$groups->{$group_id}}, splice( @{$files}, $i, 1 );
+	    }
+	}
+
+	$group_id++;
     }
+    
+    remove_single_entries($groups);
+    
+    info 'purged file content statistics:';
+    dump_hash_stats($groups);
+
+    return [ values %{$groups} ];
 }
 
-sub remove_hardlinked_files
+sub print_duplicates
+{
+    my ($files) = (@_);
+
+    print "$_->{NAME}\n" foreach (sort {$a->{NAME} cmp $b->{NAME}} @{$files});
+    print "\n";
+}
+
+sub remove_already_hardlinked_files
 {
     my ($files) = (@_);
 
@@ -291,35 +320,50 @@ sub remove_hardlinked_files
     return [ values %{$by_inode} ];
 }
 
-sub compare_files
+sub process_long_hash_group
+{
+    my ($files) = (@_);
+
+    my $content_grouped = group_by_content($files);
+    return unless @{$content_grouped};
+    
+    print_duplicates($_) foreach @{$content_grouped};
+}
+
+sub process_short_hash_group
+{
+    my ($files) = (@_);
+    
+    my $long_hash_grouped = group_by_long_hash($files);
+    return unless @{$long_hash_grouped};
+
+    process_long_hash_group($_) foreach @{$long_hash_grouped};
+}
+
+sub process_single_filesize
 {
     my ($files) = (@_);
 
     infof '%8d files (size %d)', scalar @{$files}, $files->[0]->{SIZE};
 
-    $files = remove_hardlinked_files($files);
+    my $non_hardlinked_files = remove_already_hardlinked_files($files);
+    $files = undef; # free memory as early as possible
 
     info 'discarded already hardlinked files:';
-    infof '%8d files', scalar @{$files};
-    return unless @{$files} > 1;
+    infof '%8d files', scalar @{$non_hardlinked_files};
+    return unless @{$non_hardlinked_files} > 1;
 
-    my $hashed_short = compare_by_short_hash($files);
-    return unless %{$hashed_short};
-    
-    my $hashed_long = compare_by_long_hash($hashed_short);
-    $hashed_short = undef; # free memory as early as possible
-    return unless %{$hashed_long};
-    
-    ## TODO    my $deduped = compare_by_content($hashed_long);
+    my $short_hash_grouped = group_by_short_hash($non_hardlinked_files);
+    return unless @{$short_hash_grouped};
 
-    print_duplicates($hashed_long);
+    process_short_hash_group($_) foreach @{$short_hash_grouped};
 }
 
 sub find_matches
 {
    foreach my $dev (keys %{$allfiles}) {
        foreach my $size (sort { $b <=> $a } keys %{$allfiles->{$dev}}) {
-	   compare_files(delete $allfiles->{$dev}->{$size}); # free memory as early as possible
+	   process_single_filesize(delete $allfiles->{$dev}->{$size}); # free memory as early as possible
        }
    }
 }
