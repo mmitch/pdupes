@@ -7,6 +7,9 @@ test:
 cover:
 	cover -test -ignore '\.t$$'
 
+report: cover
+	sensible-browser cover_db/coverage.html
+
 clean:
 	rm -f $(DEPS)
 	rm -f *~
